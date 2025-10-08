@@ -1,15 +1,15 @@
 # SE IMPORTAN LAS LIBRERÍAS NECESARIAS:
-import random
 import time
 import os
-import threading
+import numpy as np
+import multiprocessing as mp
 
 # SE FIJA UNA SEMILLA PARA LA GENERACIÓN DE VALORES ALEATORIOS:
-random.seed(42) 
+np.random.seed(42)
 
 # SE CREA UNA FUNCIÓN PARA GENERAR LA MATRIZ INICIAL:
 def generar_matriz(filas, columnas):
-    return [[random.randint(0, 1) for _ in range(columnas)] for _ in range(filas)]
+    return np.random.randint(0, 2, size=(filas, columnas)).tolist()
 
 # SE CREA UNA FUNCIÓN PARA CONTAR VECINOS VIVOS DE UNA CÉLULA SEGÚN SU ENTORNO:
 def contar_entorno(fila, columna, matriz):
@@ -42,51 +42,58 @@ def imprimir_matriz(matriz):
     print()
 
 # SE CREA UNA FUNCIÓN PARA ACTUALIZAR LOS BLOQUES DE FILAS:
-def actualizar_bloque(matriz, nueva_matriz, fila_inicio, fila_fin):
-    #filas = len(matriz)
+def actualizar_bloque(args):
+    matriz, fila_inicio, fila_fin = args
     columnas = len(matriz[0])
+    bloque_nuevo = [[0 for _ in range(columnas)] for _ in range(fila_fin - fila_inicio)]
+
     for i in range(fila_inicio, fila_fin):
         for j in range(columnas):
             vivas = contar_entorno(i, j, matriz)
-            nueva_matriz[i][j] = actualizar_celula(matriz[i][j], vivas)
+            bloque_nuevo[i - fila_inicio][j] = actualizar_celula(matriz[i][j], vivas)
+    return fila_inicio, bloque_nuevo
 
-# FUNCION PRINCIPAL PARA EJECUTAR EL CÓDIGO:
+# FUNCIÓN PRINCIPAL PARA EJECUTAR EL CÓDIGO:
 def main():
     filas, columnas = 1500, 1500   # Tamaño del tablero.
     generaciones = 50              # Número fijo de generaciones.
-    num_hilos = 8                  # Con este parámetro se cambia el número de hilos.
+    num_procesos = 8               # Con este parámetro se cambia el número de procesos.
 
     matriz = generar_matriz(filas, columnas)
 
-    start = time.time() # Inicio de ejecución.
+    start = time.time()  # Inicio de ejecución.
 
     for gen in range(generaciones):
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"Generación {gen+1}/{generaciones}")
+        print(f"Generación {gen + 1}/{generaciones}")
         #imprimir_matriz(matriz)
 
         nueva_matriz = [[0 for _ in range(columnas)] for _ in range(filas)]
 
-        # Dividir las filas por bloque o particiones:
-        bloque = filas // num_hilos
-        hilos = []
+        # Dividir la matriz por bloques (una parte para cada proceso)
+        bloque = filas // num_procesos
+        tareas = []
 
-        for h in range(num_hilos):
-            inicio = h * bloque
-            fin = (h + 1) * bloque if h != num_hilos - 1 else filas
-            hilo = threading.Thread(target=actualizar_bloque, args=(matriz, nueva_matriz, inicio, fin))
-            hilos.append(hilo)
-            hilo.start()
+        for p in range(num_procesos):
+            inicio = p * bloque
+            fin = (p + 1) * bloque if p != num_procesos - 1 else filas
+            tareas.append((matriz, inicio, fin))
 
-        # Se espera a que terminen todos los hilos:
-        for hilo in hilos:
-            hilo.join()
+        # Crear un Pool de procesos y ejecutar los bloques en paralelo
+        with mp.Pool(processes=num_procesos) as pool:
+            resultados = pool.map(actualizar_bloque, tareas)
+
+        # Combinar los resultados en la nueva matriz
+        for inicio, bloque_nuevo in resultados:
+            for idx, fila in enumerate(bloque_nuevo):
+                nueva_matriz[inicio + idx] = fila
 
         matriz = nueva_matriz
-        #time.sleep(0.1) 
+        # time.sleep(0.1)  # Pausa opcional para ver el avance
 
     end = time.time()
-    print(f"Tiempo total de ejecución: {end - start:.2f} segundos")
+    print(f"Tiempo total de ejecución paralela1: {end - start:.2f} segundos")
+
 
 if __name__ == "__main__":
     main()
